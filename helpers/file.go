@@ -7,7 +7,18 @@ import (
 	"strings"
 )
 
-func ExpandPath(str string, expansions ...string) string {
+var BedrockDir string
+var DefaultPathExpansions = []string{"~", Home, "$HOME", Home, "$BEDROCK_DIR", BedrockDir}
+
+func ExpandPath(str string, exp ...string) string {
+	var expansions []string
+
+	if len(exp) > 0 {
+		expansions = exp
+	} else {
+		expansions = DefaultPathExpansions
+	}
+
 	r := strings.NewReplacer(expansions...)
 	str = r.Replace(str)
 

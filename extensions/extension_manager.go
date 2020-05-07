@@ -14,6 +14,11 @@ import (
 
 type Extension struct {
 	Name string
+	Git string
+	Branch string
+	Ref string
+	Tag string
+	Path string
 	InstallSteps []InstallStep
 	Files []File
 	PostInstallMessages []string
@@ -70,9 +75,18 @@ type InstallOptions struct {
 	BedrockDir string
 }
 
-func (e Extension) Load(pkgm string) Extension {
-	e.BasePath = filepath.Join(helpers.Home, ".bedrock", "extensions", e.Name)
+func (e Extension) Load(pkgm string, options InstallOptions) Extension {
+	_ = e.GetSource(options)
+	bundlePath := filepath.Join(helpers.Home, ".bedrock", "bundle")
+
+	if len(e.Path) > 0 {
+		e.BasePath = helpers.ExpandPath(e.Path)
+	} else {
+		e.BasePath = filepath.Join(bundlePath, e.Name)
+	}
+
 	extension := LoadManifest(e, pkgm)
+	fmt.Print(extension)
 
 	return extension
 }
@@ -101,7 +115,7 @@ func LoadManifest(e Extension, pkgm string) Extension {
 	return e
 }
 
-func (e Extension) Install(options InstallOptions) {
+func (e Extension) Install(options InstallOptions) bool {
 	installResult := e.RunInstallSteps(options)
 	syncResult := e.SyncFiles(options)
 
@@ -118,12 +132,51 @@ func (e Extension) Install(options InstallOptions) {
 			}
 		}
 		fmt.Println(e.Name, "-", helpers.ColorGreen + "succeeded" + helpers.ColorReset)
+
+		return true
 	} else {
 		fmt.Println(e.Name, "-", helpers.ColorRed + "failed" + helpers.ColorReset)
 	}
+
+	return false
+}
+
+func (e Extension) GetSource(options InstallOptions) bool {
+	if len(e.Path) > 0 {
+		return true
+	}
+
+	if e.Git == "" {
+		e.Git = fmt.Sprintf("https://github.com/bedrock-env/%s.git", e.Name)
+	}
+
+	fmt.Println("Branch", e.Branch)
+	fmt.Println("Ref", e.Ref == "")
+	fmt.Println("Tag", e.Tag)
+	command := fmt.Sprintf("git -C %s clone %s %s", filepath.Join(options.BedrockDir, "bundle"), e.Git, e.Name)
+	var checkoutTarget string
+
+	switch {
+	case e.Branch != "":
+		checkoutTarget = e.Branch
+	case e.Ref != "":
+		checkoutTarget = e.Ref
+	case e.Tag != "":
+		checkoutTarget = e.Tag
+	}
+	if len(checkoutTarget) > 0  {
+		command = fmt.Sprintf("%s && git -C %s checkout %s",
+			command,filepath.Join(options.BedrockDir, "bundle", e.Name), checkoutTarget)
+	}
+
+	fmt.Println("command", command)
+	helpers.ExecuteCommandInShell("zsh", command)
+
+	return false
 }
 
 func (e Extension) RunInstallSteps(options InstallOptions) bool {
+	fmt.Println("Install steps:", e.InstallSteps)
 	if len(e.InstallSteps) == 0 {
 		return true
 	}

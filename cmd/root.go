@@ -14,7 +14,6 @@ const configFileName string = ".bedrock.json"
 const minZSHVersion = "5.0"
 
 var packageManager string
-var BedrockDir string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -26,15 +25,6 @@ examples and usage of using your application. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//Run: func(cmd *cobra.Command, args []string) {
-	//	// viper.Set("param1", "value1")
-	//	fmt.Println("Pkg Manager:", packageManager)
-	//	fmt.Println("author:", author)
-	//	//package_managers.InstallPackage("foo")
-	//	// package_manager_provider.InstallPackages("foo")
-	//},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -42,7 +32,16 @@ to quickly create a Cobra application.`,
 func Execute() {
 	var configPath = filepath.Join(helpers.Home, configFileName)
 
-	if firstRun(configPath) {
+	checkFirstRun(configPath)
+
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func checkFirstRun(configPath string) {
+	if !helpers.Exists(configPath) {
 		fmt.Println("It looks like this might be the first time Bedrock has been run.")
 		fmt.Print("Checking Bedrock requirements...\n\n")
 		if !meetRequirements() {
@@ -52,11 +51,6 @@ func Execute() {
 	}
 
 	viper.WriteConfigAs(configPath)
-
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 }
 
 func init() {
@@ -65,7 +59,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&packageManager, "package-manager", helpers.DefaultPkgManager(), "Desired package manager")
 	viper.BindPFlag("package-manager", rootCmd.PersistentFlags().Lookup("package-manager"))
 
-	rootCmd.PersistentFlags().StringVar(&BedrockDir, "bedrockdir", filepath.Join(helpers.Home, ".bedrock"), "The Bedrock base directory")
+	// NOTE: Not everything reads from this yet
+	rootCmd.PersistentFlags().StringVar(&helpers.BedrockDir, "bedrockdir", filepath.Join(helpers.Home, ".bedrock"), "The Bedrock base directory")
 	viper.BindPFlag("bedrockdir", rootCmd.PersistentFlags().Lookup("bedrockdir"))
 }
 
@@ -84,7 +79,7 @@ func meetRequirements() bool {
 
 func zshDetected() bool {
 	detected := false
-	result, err := helpers.ExecuteInShell("zsh", "echo $ZSH_VERSION")
+	result, err := helpers.ExecuteCommandInShell("zsh", "echo $ZSH_VERSION")
 
 	if err == nil {
 		zshVersion, _ := version.NewVersion(result)
@@ -99,12 +94,4 @@ func zshDetected() bool {
 	fmt.Printf("%s\u0078%s ZSH %s was not detected\n", helpers.ColorRed, helpers.ColorReset, minZSHVersion)
 
 	return detected
-}
-
-//func checkPackageManager() {
-//
-//}
-
-func firstRun(configPath string) bool {
-	return !helpers.Exists(configPath)
 }
