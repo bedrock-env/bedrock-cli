@@ -259,7 +259,7 @@ func (e Extension) SyncFiles(options InstallOptions) bool {
 			fmt.Println("")
 			if strings.TrimSpace(response) != "y" {
 				fmt.Println("    " + helpers.ColorCyan + "Skipping" + " " + destination + helpers.ColorReset)
-				break
+				continue
 			}
 		}
 
