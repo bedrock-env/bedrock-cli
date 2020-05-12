@@ -1,15 +1,16 @@
-package extensions
+package bundler
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/bedrock-env/bedrock-cli/helpers"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/bedrock-env/bedrock-cli/bedrock/helpers"
 )
 
 type Extension struct {
@@ -39,8 +40,8 @@ type UpdateSteps struct {
 	Command string `json:"command"`
 }
 type Homebrew struct {
-	InstallSteps []InstallStep `json:"install_steps"`
-	UpdateSteps  []UpdateSteps  `json:"update_steps"`
+	InstallSteps []InstallStep   `json:"install_steps"`
+	UpdateSteps  []UpdateSteps   `json:"update_steps"`
 	PostInstallMessages []string `json:"post_install_messages"`
 }
 type File struct {
@@ -50,34 +51,29 @@ type File struct {
 }
 type Macos struct {
 	Homebrew Homebrew `json:"homebrew"`
-	Files    []File  `json:"files"`
+	Files    []File   `json:"files"`
 }
 type Apt struct {
-	InstallSteps []InstallStep `json:"install_steps"`
-	UpdateSteps  []UpdateSteps  `json:"update_steps"`
+	InstallSteps []InstallStep   `json:"install_steps"`
+	UpdateSteps  []UpdateSteps   `json:"update_steps"`
 	PostInstallMessages []string `json:"post_install_messages"`
 }
 type Ubuntu struct {
-	Apt   Apt     `json:"apt"`
-	Files []File  `json:"files"`
+	Apt   Apt    `json:"apt"`
+	Files []File `json:"files"`
 }
 type Unsupported struct {
 	InstallSteps []InstallStep
 	UpdateSteps  []UpdateSteps
 }
 type Platforms struct {
-	Macos   Macos  `json:"macos"`
-	Ubuntu  Ubuntu `json:"ubuntu"`
+	Macos  Macos  `json:"macos"`
+	Ubuntu Ubuntu `json:"ubuntu"`
 }
 
-type InstallOptions struct {
-	OverwriteFiles bool
-	BedrockDir string
-}
-
-func (e Extension) Load(pkgm string, options InstallOptions) Extension {
-	_ = e.GetSource(options)
-	bundlePath := filepath.Join(helpers.Home, ".bedrock", "bundle")
+func (e Extension) Init(options Options) Extension {
+	e.getSource(options)
+	bundlePath := filepath.Join(options.BedrockDir, "bundle")
 
 	if len(e.Path) > 0 {
 		e.BasePath = helpers.ExpandPath(e.Path)
@@ -85,13 +81,38 @@ func (e Extension) Load(pkgm string, options InstallOptions) Extension {
 		e.BasePath = filepath.Join(bundlePath, e.Name)
 	}
 
-	extension := LoadManifest(e, pkgm)
-	fmt.Print(extension)
+	extension := e.loadManifest(options.PackageManager)
 
 	return extension
 }
 
-func LoadManifest(e Extension, pkgm string) Extension {
+func (e Extension) Install(options Options) bool {
+	installResult := e.runInstallSteps(options)
+	syncResult := e.syncFiles(options)
+
+	if installResult && syncResult {
+		if len(e.PostInstallMessages) > 0 {
+			message := `
+    =========================
+    Post-install instructions
+    =========================
+`
+			fmt.Println(helpers.ColorYellow + message + helpers.ColorReset)
+			for _, line := range e.PostInstallMessages {
+				fmt.Printf("    %s\n", helpers.ColorYellow+ line +helpers.ColorReset)
+			}
+		}
+		fmt.Println(e.Name, "-", helpers.ColorGreen+ "succeeded" +helpers.ColorReset)
+
+		return true
+	} else {
+		fmt.Println(e.Name, "-", helpers.ColorRed+ "failed" +helpers.ColorReset)
+	}
+
+	return false
+}
+
+func (e Extension) loadManifest(pkgm string) Extension {
 	manifestJson, _ := ioutil.ReadFile(filepath.Join(e.BasePath, "manifest.json"))
 
 	var manifest Manifest
@@ -115,44 +136,15 @@ func LoadManifest(e Extension, pkgm string) Extension {
 	return e
 }
 
-func (e Extension) Install(options InstallOptions) bool {
-	installResult := e.RunInstallSteps(options)
-	syncResult := e.SyncFiles(options)
-
-	if installResult && syncResult {
-		if len(e.PostInstallMessages) > 0 {
-			message := `
-    =========================
-    Post-install instructions
-    =========================
-`
-			fmt.Println(helpers.ColorYellow + message + helpers.ColorReset)
-			for _, line := range e.PostInstallMessages {
-				fmt.Printf("    %s\n", helpers.ColorYellow + line + helpers.ColorReset)
-			}
-		}
-		fmt.Println(e.Name, "-", helpers.ColorGreen + "succeeded" + helpers.ColorReset)
-
-		return true
-	} else {
-		fmt.Println(e.Name, "-", helpers.ColorRed + "failed" + helpers.ColorReset)
-	}
-
-	return false
-}
-
-func (e Extension) GetSource(options InstallOptions) bool {
+func (e Extension) getSource(options Options) {
 	if len(e.Path) > 0 {
-		return true
+		return
 	}
 
 	if e.Git == "" {
 		e.Git = fmt.Sprintf("https://github.com/bedrock-env/%s.git", e.Name)
 	}
 
-	fmt.Println("Branch", e.Branch)
-	fmt.Println("Ref", e.Ref == "")
-	fmt.Println("Tag", e.Tag)
 	command := fmt.Sprintf("git -C %s clone %s %s", filepath.Join(options.BedrockDir, "bundle"), e.Git, e.Name)
 	var checkoutTarget string
 
@@ -164,36 +156,36 @@ func (e Extension) GetSource(options InstallOptions) bool {
 	case e.Tag != "":
 		checkoutTarget = e.Tag
 	}
+
 	if len(checkoutTarget) > 0  {
 		command = fmt.Sprintf("%s && git -C %s checkout %s",
 			command,filepath.Join(options.BedrockDir, "bundle", e.Name), checkoutTarget)
 	}
 
-	fmt.Println("command", command)
-	helpers.ExecuteCommandInShell("zsh", command)
-
-	return false
+	fmt.Println(command)
+	out, err := helpers.ExecuteCommandInShell(exec.Command, "zsh", command)
+	fmt.Println("out", out)
+	fmt.Println("err", err)
 }
 
-func (e Extension) RunInstallSteps(options InstallOptions) bool {
-	fmt.Println("Install steps:", e.InstallSteps)
+func (e Extension) runInstallSteps(options Options) bool {
 	if len(e.InstallSteps) == 0 {
 		return true
 	}
 
-	fmt.Println(e.Name, "-", helpers.ColorYellow + "installing" + helpers.ColorReset)
+	fmt.Println(e.Name, "-", helpers.ColorYellow+ "installing" +helpers.ColorReset)
 
 	for _, step := range e.InstallSteps {
 		pathExpansions := []string{"~", helpers.Home, "$HOME", helpers.Home, "$BEDROCK_DIR", options.BedrockDir}
 		command := helpers.ExpandPath(step.Command, pathExpansions...)
 		runIf := helpers.ExpandPath(step.RunIf, pathExpansions...)
 
-		fmt.Printf("  %s %s %s\n", "Executing",  helpers.ColorYellow + step.Binary,
-			command + helpers.ColorReset)
+		fmt.Printf("  %s %s %s\n", "Executing",  helpers.ColorYellow+ step.Binary,
+			command +helpers.ColorReset)
 
 		if len(runIf) > 0 {
-			if _, ifCheckErr := ExecuteRunIfCheck(runIf); ifCheckErr != nil {
-				fmt.Printf("    %s\n", helpers.ColorCyan + "Skipping due to runif check" + helpers.ColorReset)
+			if _, ifCheckErr := executeRunIfCheck(runIf); ifCheckErr != nil {
+				fmt.Printf("    %s\n", helpers.ColorCyan+ "Skipping due to runif check" +helpers.ColorReset)
 				continue
 			}
 		}
@@ -219,13 +211,13 @@ func (e Extension) RunInstallSteps(options InstallOptions) bool {
 	return true
 }
 
-func ExecuteRunIfCheck(command string) (string, error) {
+func executeRunIfCheck(command string) (string, error) {
 	out, err := exec.Command("sh", "-c", command).CombinedOutput()
 
 	return string(out), err
 }
 
-func (e Extension) SyncFiles(options InstallOptions) bool {
+func (e Extension) syncFiles(options Options) bool {
 	if len(e.Files) > 0 {
 		fmt.Println("  Syncing files")
 	}
@@ -252,7 +244,7 @@ func (e Extension) SyncFiles(options InstallOptions) bool {
 		destinationExists := helpers.Exists(destination)
 
 		if destinationExists && !options.OverwriteFiles {
-			fmt.Printf("    %s already exists. Attempt to overwrite? y/n%s ", helpers.ColorYellow + destination,
+			fmt.Printf("    %s already exists. Attempt to overwrite? y/n%s ", helpers.ColorYellow+ destination,
 				helpers.ColorReset)
 			reader := bufio.NewReader(os.Stdin)
 			response, _ := reader.ReadString('\n')
@@ -288,8 +280,8 @@ func (e Extension) SyncFiles(options InstallOptions) bool {
 			}
 		}
 
-		fmt.Printf("    %s %s\n", helpers.ColorYellow + f.Operation,
-			f.Source + " -> "+ f.Target + helpers.ColorReset)
+		fmt.Printf("    %s %s\n", helpers.ColorYellow+ f.Operation,
+			f.Source + " -> "+ f.Target +helpers.ColorReset)
 	}
 
 	return true

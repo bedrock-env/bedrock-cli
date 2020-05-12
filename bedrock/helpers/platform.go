@@ -1,7 +1,6 @@
 package helpers
 
 import (
-	"github.com/mitchellh/go-homedir"
 	"runtime"
 )
 
@@ -10,8 +9,6 @@ const ColorGreen string = "\033[32m"
 const ColorCyan string = "\033[34m"
 const ColorYellow string = "\033[33m"
 const ColorReset string = "\033[0m"
-
-var Home, _ = homedir.Dir()
 
 func CurrentPlatform() string {
 	switch runtime.GOOS {
