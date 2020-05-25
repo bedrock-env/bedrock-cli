@@ -3,13 +3,14 @@ package helpers
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
 )
 
 var Home, _ = homedir.Dir()
-var BedrockDir string
+var BedrockDir = filepath.Join(Home, ".bedrock")
 var DefaultPathExpansions = []string{"~", Home, "$HOME", Home, "$BEDROCK_DIR", BedrockDir}
 
 func ExpandPath(str string, exp ...string) string {

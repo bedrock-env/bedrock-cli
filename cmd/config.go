@@ -9,14 +9,21 @@ import (
 	"github.com/bedrock-env/bedrock-cli/bedrock/helpers"
 )
 
+var packageManager string
+
 var configCmd = &cobra.Command{
 	Use:   "config",
-	Short: "View or manage the Bedrock configuration",
+	Short: "Manage the Bedrock configuration",
 	Run: func(cmd *cobra.Command, args []string) {
-		viper.WriteConfigAs(filepath.Join(helpers.Home, configFileName))
+		viper.WriteConfigAs(filepath.Join(helpers.Home, ".bedrock.json"))
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(configCmd)
+
+	configCmd.Flags().StringVarP(&packageManager, "package-manager", "", helpers.DefaultPkgManager(), "Set desired package manager")
+	configCmd.Flags().StringVarP(&helpers.BedrockDir, "bedrock-dir", "", filepath.Join(helpers.Home, ".bedrock"), "Set the Bedrock base directory. (absolute path)")
+	viper.BindPFlag("package_manager", configCmd.LocalFlags().Lookup("package-manager"))
+	viper.BindPFlag("bedrock_dir", configCmd.LocalFlags().Lookup("bedrock-dir"))
 }

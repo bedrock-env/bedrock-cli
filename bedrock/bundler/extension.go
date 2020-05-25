@@ -164,8 +164,10 @@ func (e Extension) getSource(options Options) {
 
 	fmt.Println(command)
 	out, err := helpers.ExecuteCommandInShell(exec.Command, "zsh", command)
-	fmt.Println("out", out)
-	fmt.Println("err", err)
+	fmt.Println(out)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func (e Extension) runInstallSteps(options Options) bool {
@@ -176,16 +178,18 @@ func (e Extension) runInstallSteps(options Options) bool {
 	fmt.Println(e.Name, "-", helpers.ColorYellow+ "installing" +helpers.ColorReset)
 
 	for _, step := range e.InstallSteps {
-		pathExpansions := []string{"~", helpers.Home, "$HOME", helpers.Home, "$BEDROCK_DIR", options.BedrockDir}
-		command := helpers.ExpandPath(step.Command, pathExpansions...)
-		runIf := helpers.ExpandPath(step.RunIf, pathExpansions...)
+		// pathExpansions := []string{"~", helpers.Home, "$HOME", helpers.Home, "$BEDROCK_DIR", options.BedrockDir}
+		command := helpers.ExpandPath(step.Command)
+		runIf := helpers.ExpandPath(step.RunIf)
 
 		fmt.Printf("  %s %s %s\n", "Executing",  helpers.ColorYellow+ step.Binary,
 			command +helpers.ColorReset)
 
+		fmt.Println(runIf)
 		if len(runIf) > 0 {
 			if _, ifCheckErr := executeRunIfCheck(runIf); ifCheckErr != nil {
 				fmt.Printf("    %s\n", helpers.ColorCyan+ "Skipping due to runif check" +helpers.ColorReset)
+				fmt.Print(ifCheckErr)
 				continue
 			}
 		}

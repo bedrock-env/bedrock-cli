@@ -45,6 +45,7 @@ func load(options Options) []Extension {
 	data, err := ioutil.ReadFile(filepath.Join(options.BedrockDir, "bundle.json"))
 	if err != nil {
 		fmt.Println(err)
+		fmt.Println("Unable to load bundle manifest")
 		os.Exit(1)
 	}
 
