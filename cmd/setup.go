@@ -13,5 +13,5 @@ var setupCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(setupCmd)
-	setupUpdateCmd.PersistentFlags().BoolVarP(&Interactive, "interactive", "i", true, "update interactivity")
+	setupCmd.PersistentFlags().BoolVarP(&Interactive, "interactive", "i", true, "update interactivity")
 }
