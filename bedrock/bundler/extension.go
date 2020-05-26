@@ -185,11 +185,14 @@ func (e Extension) runInstallSteps(options Options) bool {
 		fmt.Printf("  %s %s %s\n", "Executing",  helpers.ColorYellow+ step.Binary,
 			command +helpers.ColorReset)
 
-		fmt.Println(runIf)
 		if len(runIf) > 0 {
-			if _, ifCheckErr := executeRunIfCheck(runIf); ifCheckErr != nil {
+			if out, ifCheckErr := executeRunIfCheck(runIf); ifCheckErr != nil {
 				fmt.Printf("    %s\n", helpers.ColorCyan+ "Skipping due to runif check" +helpers.ColorReset)
-				fmt.Print(ifCheckErr)
+				if len(out) > 0 {
+					fmt.Println(out)
+					fmt.Print(ifCheckErr)
+				}
+
 				continue
 			}
 		}
