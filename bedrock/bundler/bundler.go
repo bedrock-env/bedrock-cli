@@ -12,6 +12,7 @@ import (
 
 type Options struct {
 	OverwriteFiles bool
+	SkipFiles bool
 	BedrockDir string
 	PackageManager string
 }

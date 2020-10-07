@@ -88,7 +88,13 @@ func (e Extension) Init(options Options) Extension {
 
 func (e Extension) Install(options Options) bool {
 	installResult := e.runInstallSteps(options)
-	syncResult := e.syncFiles(options)
+	var syncResult bool
+	if options.SkipFiles {
+		syncResult = true
+		fmt.Println("    " + helpers.ColorCyan + "Skipping syncing files" + helpers.ColorReset)
+	} else {
+		syncResult = e.syncFiles(options)
+	}
 
 	if installResult && syncResult {
 		if len(e.PostInstallMessages) > 0 {
@@ -231,10 +237,15 @@ func (e Extension) syncFiles(options Options) bool {
 
 	pathExpansions := []string{"~", helpers.Home, "$HOME", helpers.Home, "$BEDROCK_DIR", options.BedrockDir}
 
-	// TODO: Support skipping all.
-	// TODO: Support skipping all for the current extension.
 	// TODO: Support overwriting all for the current extension.
+	skipAll := false
+	overwriteAll := false
+
 	for _, f := range e.Files {
+		if skipAll {
+			continue
+		}
+
 		var source string
 
 		if f.Operation == "remote" {
@@ -250,14 +261,23 @@ func (e Extension) syncFiles(options Options) bool {
 		destination := helpers.ExpandPath(f.Target, pathExpansions...)
 		destinationExists := helpers.Exists(destination)
 
-		if destinationExists && !options.OverwriteFiles {
-			fmt.Printf("    %s already exists. Attempt to overwrite? y/n%s ", helpers.ColorYellow+ destination,
+		if !options.OverwriteFiles && !overwriteAll && destinationExists {
+			fmt.Printf("    %s already exists. Attempt to overwrite? y/n/(s)kip remaining/(O)verwrite remaining)%s ", helpers.ColorYellow+ destination,
 				helpers.ColorReset)
 			reader := bufio.NewReader(os.Stdin)
 			response, _ := reader.ReadString('\n')
+			response = strings.TrimSpace(response)
 			fmt.Println("")
-			if strings.TrimSpace(response) != "y" {
-				fmt.Println("    " + helpers.ColorCyan + "Skipping" + " " + destination + helpers.ColorReset)
+			if response == "s" {
+				skipAll = true
+				fmt.Println("    " + helpers.ColorCyan + "Skipping remaining files for extension\n" + helpers.ColorReset)
+				continue
+			} else if response != "y" {
+				fmt.Println("    " + helpers.ColorCyan + "Skipping" + " " + destination + "\n" + helpers.ColorReset)
+				continue
+			} else if response != "O" {
+				overwriteAll = true
+				fmt.Println("    " + helpers.ColorYellow + "Overwriting all files for extension\n" + helpers.ColorReset)
 				continue
 			}
 		}
