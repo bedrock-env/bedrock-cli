@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/bedrock-env/bedrock-cli/bedrock"
 )
 
 var out io.Writer = os.Stdout
@@ -16,8 +19,9 @@ func TestVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := strings.TrimSpace(string(out))
-	expected := "Bedrock " + VERSION
+	expected := fmt.Sprintf("Bedrock CLI %s\nBedrock Core %s", bedrock.VERSION, bedrock.CoreVersion())
+	result := strings.TrimSpace(out)
+
 	if result != expected {
 		t.Fatalf("expected \"%s\" got \"%s\"", expected, result)
 	}

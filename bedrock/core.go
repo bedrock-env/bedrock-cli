@@ -21,6 +21,8 @@ import (
 
 const ZshMinVersion = "5.0"
 const CoreMinVersion = "0.0.1-alpha"
+const cliLatestReleaseURL = "https://api.github.com/repos/bedrock-env/bedrock-cli/releases/latest"
+const cliUpdateCheckInterval = 168 // 7 days
 const coreRepoURL = "https://github.com/bedrock-env/bedrock-core.git"
 const coreLatestReleaseURL = "https://api.github.com/repos/bedrock-env/bedrock-core/releases/latest"
 const coreUpdateCheckInterval = 168 // 7 days
@@ -34,8 +36,11 @@ type CoreCheckResult struct {
 
 
 func Preflight() error {
-	coreResult := CheckCore()
+	if CheckCLI() {
+		fmt.Println("A newer version of Bedrock CLI is available.")
+	}
 
+	coreResult := CheckCore()
 	if !coreResult.Found {
 		return errors.New("bedrock core not found")
 	} else if !coreResult.MeetsMinVersion {
@@ -84,39 +89,55 @@ func CheckGit() bool {
 	return detected
 }
 
+func CheckCLI() bool {
+	updateAvailable := false
+	currentTime := time.Now().UTC()
+	lastUpdateCheckAt := viper.GetString("last_cli_update_check_at")
+
+	if len(lastUpdateCheckAt) == 0 {
+		updateAvailable = checkCLIHasUpdate()
+	} else {
+		lastUpdateCheckTime, timeParseErr := time.Parse(time.RFC3339, lastUpdateCheckAt)
+
+		if timeParseErr == nil {
+			diff := currentTime.Sub(lastUpdateCheckTime)
+			if diff.Hours() > cliUpdateCheckInterval {
+				updateAvailable = checkCLIHasUpdate()
+			}
+		}
+	}
+
+	return updateAvailable
+}
+
 func CheckCore() CoreCheckResult {
 	found := false
 	updateAvailable := false
 	meetsMinVersion := false
 	var ver string
 
-	versionResult, err := ioutil.ReadFile(filepath.Join(helpers.BedrockDir, "VERSION"))
-
-	if err == nil {
-		found = true
-	}
-
-	bedrockVersion, _ := version.NewVersion(strings.TrimSpace(string(versionResult)))
+	coreVersion := CoreVersion()
 	requiredVersion, _ := version.NewVersion(CoreMinVersion)
 
-	if bedrockVersion != nil {
-		if bedrockVersion.GreaterThanOrEqual(requiredVersion) {
+	if coreVersion != nil {
+		found = true
+		if coreVersion.GreaterThanOrEqual(requiredVersion) {
 			meetsMinVersion = true
 		}
-		ver = bedrockVersion.String()
+		ver = coreVersion.String()
 	}
 
 	currentTime := time.Now().UTC()
-	lastUpdateCheckAt := viper.GetString("last_update_check_at")
+	lastUpdateCheckAt := viper.GetString("last_core_update_check_at")
 	if len(lastUpdateCheckAt) == 0 {
-		updateAvailable = checkCoreHasUpdate(bedrockVersion)
+		updateAvailable = checkCoreHasUpdate(coreVersion)
 	} else {
 		lastUpdateCheckTime, timeParseErr := time.Parse(time.RFC3339, lastUpdateCheckAt)
 
 		if timeParseErr == nil {
 			diff := currentTime.Sub(lastUpdateCheckTime)
 			if diff.Hours() > coreUpdateCheckInterval {
-				updateAvailable = checkCoreHasUpdate(bedrockVersion)
+				updateAvailable = checkCoreHasUpdate(coreVersion)
 			}
 		}
 	}
@@ -134,7 +155,7 @@ func InstallCore(interactive bool) (bool, error) {
 		return false, nil
 	}
 
-	latestRelease, err := getLatestCoreRelease()
+	latestRelease, err := getLatestRelease(coreLatestReleaseURL)
 	if err != nil {
 		return false, err
 	}
@@ -147,7 +168,7 @@ func InstallCore(interactive bool) (bool, error) {
 		return false, err
 	}
 
-	setLastCheckAt()
+	setLastCoreCheckAt()
 
 	return true, nil
 }
@@ -157,7 +178,7 @@ func UpdateCore(interactive bool) (bool, error) {
 		return false, nil
 	}
 
-	latestRelease, err := getLatestCoreRelease()
+	latestRelease, err := getLatestRelease(coreLatestReleaseURL)
 	if err != nil {
 		return false, err
 	}
@@ -176,7 +197,7 @@ func UpdateCore(interactive bool) (bool, error) {
 }
 
 func checkCoreHasUpdate(v *version.Version) bool {
-	tag, err := getLatestCoreRelease()
+	tag, err := getLatestRelease(coreLatestReleaseURL)
 	if err != nil {
 		fmt.Println("Bedrock Core update check failed.")
 		fmt.Println(err)
@@ -185,7 +206,7 @@ func checkCoreHasUpdate(v *version.Version) bool {
 	latestVersion, _ := version.NewVersion(tag)
 
 	if latestVersion.LessThanOrEqual(v) {
-		setLastCheckAt()
+		setLastCoreCheckAt()
 
 		return false
 	}
@@ -193,8 +214,41 @@ func checkCoreHasUpdate(v *version.Version) bool {
 	return true
 }
 
-func setLastCheckAt() {
-	viper.Set("last_update_check_at", time.Now().UTC())
+func checkCLIHasUpdate() bool {
+	tag, err := getLatestRelease(cliLatestReleaseURL)
+	if err != nil {
+		fmt.Println("Bedrock CLI update check failed.")
+		fmt.Println(err)
+		return false
+	}
+	latestVersion, _ := version.NewVersion(tag)
+	currentVersion, _ := version.NewVersion(VERSION)
+
+	if latestVersion.LessThanOrEqual(currentVersion) {
+		viper.Set("last_cli_update_check_at", time.Now().UTC())
+		viper.WriteConfig()
+
+		return false
+	}
+
+	return true
+}
+
+func CoreVersion() *version.Version {
+	versionResult, fileErr := ioutil.ReadFile(filepath.Join(helpers.BedrockDir, "VERSION"))
+	if fileErr != nil {
+		return nil
+	}
+	versionStr := strings.TrimSpace(string(versionResult))
+	coreVersion, versionErr := version.NewVersion(versionStr)
+	if versionErr != nil {
+		return nil
+	}
+
+	return coreVersion
+}
+func setLastCoreCheckAt() {
+	viper.Set("last_core_update_check_at", time.Now().UTC())
 	viper.WriteConfig()
 }
 
@@ -206,8 +260,8 @@ func promptYN(message string) (result bool) {
 	return strings.TrimSpace(response) == "y"
 }
 
-func getLatestCoreRelease() (tag string, error error) {
-	resp, err := http.Get(coreLatestReleaseURL)
+func getLatestRelease(url string) (tag string, error error) {
+	resp, err := http.Get(url)
 	if err != nil {
 		return "", err
 	}

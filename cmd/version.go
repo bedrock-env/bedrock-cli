@@ -9,8 +9,6 @@ import (
 	"github.com/bedrock-env/bedrock-cli/bedrock"
 )
 
-const VERSION = "0.0.1"
-
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show Bedrock version information",
@@ -22,7 +20,7 @@ var versionCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(cmd.OutOrStdout(), "Bedrock", VERSION)
+		fmt.Fprintf(cmd.OutOrStdout(), "Bedrock CLI %s\nBedrock Core %s\n", bedrock.VERSION, bedrock.CoreVersion())
 	},
 }
 
