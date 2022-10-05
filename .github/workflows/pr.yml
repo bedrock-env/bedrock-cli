@@ -10,11 +10,13 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - name: Setup go
-        uses: actions/setup-go@master
-        with:
-          go-version: 1.19
       - name: Checkout code
         uses: actions/checkout@v2
-      - run: go get github.com/mitchellh/gox
-      - run: gox -osarch="darwin/amd64 darwin/arm64 linux/386 linux/amd64 linux/arm" -output="build/bedrock-{{.OS}}-{{.Arch}}"
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: |
+          go get github.com/mitchellh/gox@latest
+          gox -osarch="darwin/amd64 darwin/arm64 linux/386 linux/amd64 linux/arm" -output="build/bedrock-{{.OS}}-{{.Arch}}"
