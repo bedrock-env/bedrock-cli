@@ -1,72 +1,58 @@
 package bundler
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"github.com/bedrock-env/bedrock-cli/bedrock/helpers"
+	"github.com/mitchellh/mapstructure"
+	"github.com/spf13/viper"
 	"os"
 	"path/filepath"
-
-	"github.com/bedrock-env/bedrock-cli/bedrock/helpers"
 )
 
 type Options struct {
 	OverwriteFiles bool
-	SkipFiles bool
-	BedrockDir string
+	SkipFiles      bool
+	BedrockDir     string
 	PackageManager string
 }
 
-func Install(options Options) {
-	removeOldBundle(options)
-	ensureBundleDir(options)
+func Bundle(options Options) {
+	var extensions []Extension
+	var extensionManifest map[string]interface{}
+	viper.UnmarshalKey("extensions", &extensionManifest)
 
-	desiredBundle := load(options)
-
-	var bundle []Extension
-
-	for _, e := range desiredBundle {
-		result := e.Install(options)
-
-		if result {
-			bundle = append(bundle, e)
+	for k, v := range extensionManifest {
+		var extension Extension
+		err := mapstructure.Decode(v, &extension)
+		if err != nil {
+			fmt.Println(err)
 		}
+		extension.Name = k
+		extensions = append(extensions, extension)
 	}
 
-	var bundleData string
-	for _, e := range bundle {
-		bundleData = fmt.Sprintf("%s%s\n", bundleData, e.BasePath)
+	fmt.Println(helpers.WarnStyleBold.MarginLeft(0).Render("=> Cleaning bundle..."))
+	// removeOldBundle(options)
+	// ensureBundleDir(options)
+	fmt.Println(helpers.WarnStyleBold.MarginLeft(0).Render("=> Installing bundle..."))
+
+	//bundleConfig := strings.Builder{}
+
+	for _, extension := range extensions {
+		fmt.Println(helpers.InfoStyleBold.Render(extension.Name))
+		//fmt.Println(helpers.BasicStyle.MarginLeft(2).Render(extension.Url))
+
+		//for _, e := range extensions {
+		//	succeeded := e.Install(options)
+		//
+		//	if succeeded {
+		//		bundleConfig.WriteString(e.BasePath + "\n")
+		//	}
+		//}
+		//
+		//os.WriteFile(filepath.Join(options.BedrockDir, "bundle", "load"),
+		//	[]byte(bundleConfig.String()), 0744)
 	}
-
-	ioutil.WriteFile(filepath.Join(options.BedrockDir, "bundle", "load"),
-		[]byte(bundleData),0744)
-}
-
-func load(options Options) []Extension {
-	data, err := ioutil.ReadFile(filepath.Join(options.BedrockDir, "bundle.json"))
-	if err != nil {
-		fmt.Println(err)
-		fmt.Println("Unable to load bundle manifest")
-		os.Exit(1)
-	}
-
-	var bundleConfig []map[string]string
-	json.Unmarshal([]byte(data), &bundleConfig)
-
-	var bundle []Extension
-	for _, element := range bundleConfig {
-		extension := Extension{
-			Name: element["name"],
-			Branch: element["branch"],
-			Git: element["git"],
-			Tag: element["tag"],
-			Ref: element["ref"],
-			Path: element["path"],
-		}.Init(options)
-		bundle = append(bundle, extension)
-	}
-
-	return bundle
 }
 
 func removeOldBundle(options Options) {

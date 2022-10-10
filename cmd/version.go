@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/charmbracelet/lipgloss"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -20,7 +22,25 @@ var versionCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintf(cmd.OutOrStdout(), "Bedrock CLI %s\nBedrock Core %s\n", bedrock.VERSION, bedrock.CoreVersion())
+		doc := strings.Builder{}
+
+		versionBlock := lipgloss.JoinVertical(
+			lipgloss.Left,
+			lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				lipgloss.NewStyle().Bold(true).Render("CLI"),
+				lipgloss.NewStyle().MarginLeft(5).Render(bedrock.VERSION),
+			),
+			lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				lipgloss.NewStyle().Bold(true).Render("Core"),
+				lipgloss.NewStyle().MarginLeft(4).Render(bedrock.CoreVersion().String()),
+			),
+		)
+
+		doc.WriteString(versionBlock)
+
+		fmt.Fprintln(cmd.OutOrStdout(), doc.String())
 	},
 }
 

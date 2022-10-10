@@ -14,16 +14,18 @@ import (
 )
 
 type Extension struct {
-	Name string
-	Git string
-	Branch string
-	Ref string
-	Tag string
-	Path string
-	InstallSteps []InstallStep
-	Files []File
+	Name                string
+	Url                 string
+	Git                 string
+	Branch              string
+	Ref                 string
+	Tag                 string
+	Type                string
+	Path                string
+	InstallSteps        []InstallStep
+	Files               []File
 	PostInstallMessages []string
-	BasePath string
+	BasePath            string
 }
 
 type Manifest struct {
@@ -33,20 +35,20 @@ type Manifest struct {
 type InstallStep struct {
 	Binary  string `json:"binary"`
 	Command string `json:"command"`
-	RunIf string   `json:"runif"`
+	RunIf   string `json:"runif"`
 }
 type UpdateSteps struct {
 	Binary  string `json:"binary"`
 	Command string `json:"command"`
 }
 type Homebrew struct {
-	InstallSteps []InstallStep   `json:"install_steps"`
-	UpdateSteps  []UpdateSteps   `json:"update_steps"`
-	PostInstallMessages []string `json:"post_install_messages"`
+	InstallSteps        []InstallStep `json:"install_steps"`
+	UpdateSteps         []UpdateSteps `json:"update_steps"`
+	PostInstallMessages []string      `json:"post_install_messages"`
 }
 type File struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
+	Source    string `json:"source"`
+	Target    string `json:"target"`
 	Operation string `json:"operation"`
 }
 type Macos struct {
@@ -54,9 +56,9 @@ type Macos struct {
 	Files    []File   `json:"files"`
 }
 type Apt struct {
-	InstallSteps []InstallStep   `json:"install_steps"`
-	UpdateSteps  []UpdateSteps   `json:"update_steps"`
-	PostInstallMessages []string `json:"post_install_messages"`
+	InstallSteps        []InstallStep `json:"install_steps"`
+	UpdateSteps         []UpdateSteps `json:"update_steps"`
+	PostInstallMessages []string      `json:"post_install_messages"`
 }
 type Ubuntu struct {
 	Apt   Apt    `json:"apt"`
@@ -105,14 +107,14 @@ func (e Extension) Install(options Options) bool {
 `
 			fmt.Println(helpers.ColorYellow + message + helpers.ColorReset)
 			for _, line := range e.PostInstallMessages {
-				fmt.Printf("    %s\n", helpers.ColorYellow+ line +helpers.ColorReset)
+				fmt.Printf("    %s\n", helpers.ColorYellow+line+helpers.ColorReset)
 			}
 		}
-		fmt.Println(e.Name, "-", helpers.ColorGreen+ "succeeded" +helpers.ColorReset)
+		fmt.Println(e.Name, "-", helpers.ColorGreen+"succeeded"+helpers.ColorReset)
 
 		return true
 	} else {
-		fmt.Println(e.Name, "-", helpers.ColorRed+ "failed" +helpers.ColorReset)
+		fmt.Println(e.Name, "-", helpers.ColorRed+"failed"+helpers.ColorReset)
 	}
 
 	return false
@@ -163,9 +165,9 @@ func (e Extension) getSource(options Options) {
 		checkoutTarget = e.Tag
 	}
 
-	if len(checkoutTarget) > 0  {
+	if len(checkoutTarget) > 0 {
 		command = fmt.Sprintf("%s && git -C %s checkout %s",
-			command,filepath.Join(options.BedrockDir, "bundle", e.Name), checkoutTarget)
+			command, filepath.Join(options.BedrockDir, "bundle", e.Name), checkoutTarget)
 	}
 
 	fmt.Println(command)
@@ -181,19 +183,19 @@ func (e Extension) runInstallSteps(options Options) bool {
 		return true
 	}
 
-	fmt.Println(e.Name, "-", helpers.ColorYellow+ "installing" +helpers.ColorReset)
+	fmt.Println(e.Name, "-", helpers.ColorYellow+"installing"+helpers.ColorReset)
 
 	for _, step := range e.InstallSteps {
 		// pathExpansions := []string{"~", helpers.Home, "$HOME", helpers.Home, "$BEDROCK_DIR", options.BedrockDir}
 		command := helpers.ExpandPath(step.Command)
 		runIf := helpers.ExpandPath(step.RunIf)
 
-		fmt.Printf("  %s %s %s\n", "Executing",  helpers.ColorYellow+ step.Binary,
-			command +helpers.ColorReset)
+		fmt.Printf("  %s %s %s\n", "Executing", helpers.ColorYellow+step.Binary,
+			command+helpers.ColorReset)
 
 		if len(runIf) > 0 {
 			if out, ifCheckErr := executeRunIfCheck(runIf); ifCheckErr != nil {
-				fmt.Printf("    %s\n", helpers.ColorCyan+ "Skipping due to runif check" +helpers.ColorReset)
+				fmt.Printf("    %s\n", helpers.ColorCyan+"Skipping due to runif check"+helpers.ColorReset)
 				if len(out) > 0 {
 					fmt.Println(out)
 					fmt.Print(ifCheckErr)
@@ -251,8 +253,8 @@ func (e Extension) syncFiles(options Options) bool {
 		if f.Operation == "remote" {
 			source = f.Source
 		} else {
-			source = filepath.Join(e.BasePath,  helpers.ExpandPath(f.Source, pathExpansions...))
-			if ! helpers.Exists(source) {
+			source = filepath.Join(e.BasePath, helpers.ExpandPath(f.Source, pathExpansions...))
+			if !helpers.Exists(source) {
 				fmt.Println("    " + helpers.ColorRed + source + " does not exist, skipping." + helpers.ColorReset)
 				return false
 			}
@@ -262,7 +264,7 @@ func (e Extension) syncFiles(options Options) bool {
 		destinationExists := helpers.Exists(destination)
 
 		if !options.OverwriteFiles && !overwriteAll && destinationExists {
-			fmt.Printf("    %s already exists. Attempt to overwrite? y/n/(s)kip remaining/(O)verwrite remaining)%s ", helpers.ColorYellow+ destination,
+			fmt.Printf("    %s already exists. Attempt to overwrite? y/n/(s)kip remaining/(O)verwrite remaining)%s ", helpers.ColorYellow+destination,
 				helpers.ColorReset)
 			reader := bufio.NewReader(os.Stdin)
 			response, _ := reader.ReadString('\n')
@@ -283,7 +285,7 @@ func (e Extension) syncFiles(options Options) bool {
 		}
 
 		destinationBasePath := filepath.Dir(destination)
-		if ! helpers.Exists(destinationBasePath) {
+		if !helpers.Exists(destinationBasePath) {
 			os.MkdirAll(destinationBasePath, os.FileMode(0744))
 		}
 
@@ -307,8 +309,8 @@ func (e Extension) syncFiles(options Options) bool {
 			}
 		}
 
-		fmt.Printf("    %s %s\n", helpers.ColorYellow+ f.Operation,
-			f.Source + " -> "+ f.Target +helpers.ColorReset)
+		fmt.Printf("    %s %s\n", helpers.ColorYellow+f.Operation,
+			f.Source+" -> "+f.Target+helpers.ColorReset)
 	}
 
 	return true

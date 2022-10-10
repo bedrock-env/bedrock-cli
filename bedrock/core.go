@@ -25,15 +25,14 @@ const cliLatestReleaseURL = "https://api.github.com/repos/bedrock-env/bedrock-cl
 const cliUpdateCheckInterval = 168 // 7 days
 const coreRepoURL = "https://github.com/bedrock-env/bedrock-core.git"
 const coreLatestReleaseURL = "https://api.github.com/repos/bedrock-env/bedrock-core/releases/latest"
-const coreUpdateCheckInterval = 168 // 7 days
+const coreUpdateCheckInterval = 168 // 7 daysZ
 
 type CoreCheckResult struct {
-	Found bool
+	Found           bool
 	MeetsMinVersion bool
 	UpdateAvailable bool
-	Version string
+	Version         string
 }
-
 
 func Preflight() error {
 	if CheckCLI() {
@@ -92,7 +91,7 @@ func CheckGit() bool {
 func CheckCLI() bool {
 	updateAvailable := false
 	currentTime := time.Now().UTC()
-	lastUpdateCheckAt := viper.GetString("last_cli_update_check_at")
+	lastUpdateCheckAt := viper.GetString("settings.last_cli_update_check_at")
 
 	if len(lastUpdateCheckAt) == 0 {
 		updateAvailable = checkCLIHasUpdate()
@@ -128,7 +127,7 @@ func CheckCore() CoreCheckResult {
 	}
 
 	currentTime := time.Now().UTC()
-	lastUpdateCheckAt := viper.GetString("last_core_update_check_at")
+	lastUpdateCheckAt := viper.GetString("settings.last_core_update_check_at")
 	if len(lastUpdateCheckAt) == 0 {
 		updateAvailable = checkCoreHasUpdate(coreVersion)
 	} else {
@@ -227,6 +226,7 @@ func checkCLIHasUpdate() bool {
 	if latestVersion.LessThanOrEqual(currentVersion) {
 		viper.Set("last_cli_update_check_at", time.Now().UTC())
 		viper.WriteConfig()
+		helpers.RewriteConfig()
 
 		return false
 	}
@@ -247,9 +247,11 @@ func CoreVersion() *version.Version {
 
 	return coreVersion
 }
+
 func setLastCoreCheckAt() {
-	viper.Set("last_core_update_check_at", time.Now().UTC())
+	viper.Set("settings.last_core_update_check_at", time.Now().UTC())
 	viper.WriteConfig()
+	helpers.RewriteConfig()
 }
 
 func promptYN(message string) (result bool) {
@@ -271,7 +273,7 @@ func getLatestRelease(url string) (tag string, error error) {
 		return "", err
 	}
 
-	var githubData map[string] string
+	var githubData map[string]string
 	json.Unmarshal(body, &githubData)
 
 	if err != nil {

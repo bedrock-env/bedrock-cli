@@ -12,7 +12,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "bedrock",
+	Use: "bedrock",
 }
 
 func Execute() {
@@ -27,8 +27,8 @@ func init() {
 }
 
 func initConfig() {
-	viper.SetConfigFile(filepath.Join(helpers.Home, ".bedrock.json"))
+	viper.SetConfigType("yaml")
+	viper.SetConfigFile(filepath.Join(helpers.Home, ".config", "bedrock", "config.yaml"))
 	viper.AutomaticEnv()
 	viper.ReadInConfig()
 }
-
