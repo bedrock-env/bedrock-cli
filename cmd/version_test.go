@@ -2,12 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/bedrock-env/bedrock-cli/bedrock"
 	"io"
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/bedrock-env/bedrock-cli/bedrock"
 )
 
 var out io.Writer = os.Stdout

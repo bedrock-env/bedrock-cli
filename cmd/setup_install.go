@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"fmt"
-
-	"github.com/spf13/cobra"
-
 	"github.com/bedrock-env/bedrock-cli/bedrock"
 	"github.com/bedrock-env/bedrock-cli/bedrock/helpers"
+	"github.com/spf13/cobra"
 )
 
 var setupInstallCmd = &cobra.Command{

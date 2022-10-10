@@ -13,6 +13,7 @@ var InfoStyleBold = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#2
 var InfoStyle = lipgloss.NewStyle().Foreground(COLORINFO)
 var WarnStyleBold = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e5c223"))
 var WarnStyle = lipgloss.NewStyle().Foreground(COLORWARN)
+var ErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#e64949"))
 var BasicStyle = lipgloss.NewStyle()
 
 var style = lipgloss.NewStyle().

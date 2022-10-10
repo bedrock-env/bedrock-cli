@@ -2,13 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/bedrock-env/bedrock-cli/bedrock"
 	"github.com/charmbracelet/lipgloss"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
-
-	"github.com/bedrock-env/bedrock-cli/bedrock"
 )
 
 var versionCmd = &cobra.Command{
