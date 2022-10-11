@@ -57,10 +57,12 @@ func Bundle(options Options) bool {
 
 		e, _ := extension.Prepare(options)
 
-		if len(e.InstallSteps) > 0 {
-			fmt.Println(e.InstallSteps[0].Command)
-			fmt.Println(e.InstallSteps[0].RunIf)
-		}
+		e.Setup(options)
+
+		//if len(e.InstallSteps) > 0 {
+		//	fmt.Println(e.InstallSteps[0].Command)
+		//	fmt.Println(e.InstallSteps[0].RunIf)
+		//}
 
 		//fmt.Println(helpers.BasicStyle.MarginLeft(2).Render(extension.Url))
 

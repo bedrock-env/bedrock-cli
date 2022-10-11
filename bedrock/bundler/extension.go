@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type Extension struct {
@@ -78,7 +79,44 @@ func (e Extension) Prepare(options Options) (Extension, error) {
 }
 
 func (e Extension) Setup(options Options) bool {
+	for _, step := range e.InstallSteps {
+		fmt.Println(helpers.BasicStyle.Render(step.Name))
+
+		command := helpers.ExpandPath(step.Command)
+		runIf := helpers.ExpandPath(step.RunIf)
+
+		if len(runIf) > 0 {
+			if _, ifCheckErr := executeRunIfCheck(runIf); ifCheckErr != nil {
+				fmt.Println(helpers.WarnStyle.Render("Skipping due to runif check"))
+				//if len(out) > 0 {
+				//	fmt.Println(out)
+				//	fmt.Print(ifCheckErr)
+				//}
+
+				continue
+			}
+		}
+
+		// FIXME: the command argument splitting in helpers.ExecuteCommand messes with the natural quoting users would
+		//        supply in `-c` argument when setting the binary to something like `sh`.
+		out, err := helpers.ExecuteCommandInShell(exec.Command, "zsh", command)
+
+		var color string
+		if err != nil {
+			color = helpers.ColorRed
+		} else {
+			color = helpers.ColorGreen
+		}
+
+		if len(out) > 0 {
+			for _, line := range strings.Split(string(out), "\n") {
+				fmt.Printf("    %s\n", color+line+helpers.ColorReset)
+			}
+		}
+	}
+
 	installResult := e.runSteps(options)
+
 	var syncResult bool
 	if options.SkipFiles {
 		syncResult = true
