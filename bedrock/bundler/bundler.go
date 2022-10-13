@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Options struct {
@@ -17,28 +18,17 @@ type Options struct {
 }
 
 func Bundle(options Options) bool {
+	bundleConfig := strings.Builder{}
+	var bundleSucceeded bool
+
 	var extensions []Extension
-	//var extensionManifest map[string]interface{}
 	viper.UnmarshalKey("bundle", &extensions)
 
-	//for k, v := range extensionManifest {
-	//	var extension Extension
-	//	err := mapstructure.Decode(v, &extension)
-	//	if err != nil {
-	//		fmt.Println(err)
-	//	}
-	//	extension.Name = k
-	//	extensions = append(extensions, extension)
-	//}
-
 	fmt.Println(helpers.WarnStyleBold.MarginLeft(0).Render("=> Cleaning bundle..."))
-	// removeOldBundle(options)
-	// ensureBundleDir(options)
+	removeOldBundle(options)
+	ensureBundleDir(options)
+
 	fmt.Println(helpers.WarnStyleBold.MarginLeft(0).Render("=> Installing bundle..."))
-
-	//bundleConfig := strings.Builder{}
-
-	var bundleSucceeded bool
 
 	for _, extension := range extensions {
 		fmt.Println(helpers.InfoStyleBold.Render(extension.Name))
@@ -50,36 +40,33 @@ func Bundle(options Options) bool {
 				fmt.Println(helpers.ErrorStyle.MarginLeft(2).Render("- " + ve.Error()))
 			}
 
-			bundleSucceeded = false
+			break
+		}
+
+		extension.Prepare(options)
+
+		setupSucceeded := extension.Setup(options)
+
+		if !setupSucceeded {
+			fmt.Println(helpers.ErrorStyle.MarginLeft(2).Render("Setup failed! Halting bundle install."))
 
 			break
 		}
 
-		e, _ := extension.Prepare(options)
-
-		e.Setup(options)
-
-		//if len(e.InstallSteps) > 0 {
-		//	fmt.Println(e.InstallSteps[0].Command)
-		//	fmt.Println(e.InstallSteps[0].RunIf)
-		//}
-
-		//fmt.Println(helpers.BasicStyle.MarginLeft(2).Render(extension.Url))
-
-		//for _, e := range extensions {
-		//	succeeded := e.Install(options)
-		//
-		//	if succeeded {
-		//		bundleConfig.WriteString(e.BasePath + "\n")
-		//	}
-		//}
-		//
-		//os.WriteFile(filepath.Join(options.BedrockDir, "bundle", "load"),
-		//	[]byte(bundleConfig.String()), 0744)
+		bundleConfig.WriteString(extension.SourcePath + "\n")
+		bundleSucceeded = true
 	}
 
 	if !bundleSucceeded {
 		return false
+	}
+
+	fmt.Println(helpers.WarnStyleBold.MarginLeft(0).Render("=> Writing bundle config..."))
+
+	err := os.WriteFile(filepath.Join(options.BedrockDir, "bundle", "load"),
+		[]byte(bundleConfig.String()), 0744)
+	if err != nil {
+		fmt.Println(err.Error())
 	}
 
 	return true

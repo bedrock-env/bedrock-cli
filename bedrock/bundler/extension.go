@@ -1,9 +1,11 @@
 package bundler
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"github.com/bedrock-env/bedrock-cli/bedrock/helpers"
+	"github.com/charmbracelet/lipgloss"
 	yamlv3 "gopkg.in/yaml.v3"
 	"os"
 	"os/exec"
@@ -16,12 +18,12 @@ type Extension struct {
 	Git  string
 	Path string
 	//Archive             string
-	Branch              string
-	Ref                 string
-	Tag                 string
-	InstallSteps        []InstallStep
-	PostInstallMessages []string
-	SourcePath          string
+	Branch       string
+	Ref          string
+	Tag          string
+	InstallSteps []InstallStep
+	InstallNotes string
+	SourcePath   string
 }
 
 type ExtensionManifest struct {
@@ -31,16 +33,18 @@ type ExtensionManifest struct {
 	}
 	Platforms []string
 	Setup     struct {
-		Macos []InstallStep
+		Macos struct {
+			InstallNotes string `yaml:"install_notes"`
+			Steps        []InstallStep
+		}
 	}
 }
 
 type InstallStep struct {
-	Name        string
-	Command     string
-	RunIf       string
-	PostMessage string
-	Files       []File
+	Name    string
+	Command string
+	RunIf   string
+	Files   []File
 }
 
 type File struct {
@@ -49,7 +53,7 @@ type File struct {
 	Operation string
 }
 
-func (e Extension) Validate() []error {
+func (e *Extension) Validate() []error {
 	var validationErrors []error
 
 	if e.Path == "" && e.Git == "" {
@@ -59,13 +63,13 @@ func (e Extension) Validate() []error {
 	return validationErrors
 }
 
-func (e Extension) Prepare(options Options) (Extension, error) {
+func (e *Extension) Prepare(options Options) error {
 	sourceErr := e.getSource()
 	if sourceErr != nil {
-		return Extension{}, sourceErr
+		return sourceErr
 	}
 
-	bundlePath := filepath.Join(options.BedrockDir, "bundlenew")
+	bundlePath := filepath.Join(options.BedrockDir, "bundle")
 
 	if len(e.Path) > 0 {
 		e.SourcePath = helpers.ExpandPath(e.Path)
@@ -73,81 +77,67 @@ func (e Extension) Prepare(options Options) (Extension, error) {
 		e.SourcePath = filepath.Join(bundlePath, e.Name)
 	}
 
-	extension := e.hydrate()
+	e.hydrate()
 
-	return extension, nil
+	return nil
 }
 
-func (e Extension) Setup(options Options) bool {
+func (e *Extension) Setup(options Options) bool {
+	succeeded := true
+
 	for _, step := range e.InstallSteps {
-		fmt.Println(helpers.BasicStyle.Render(step.Name))
+		fmt.Println(helpers.ExtensionInstallStep.Render(step.Name))
 
 		command := helpers.ExpandPath(step.Command)
 		runIf := helpers.ExpandPath(step.RunIf)
 
 		if len(runIf) > 0 {
 			if _, ifCheckErr := executeRunIfCheck(runIf); ifCheckErr != nil {
-				fmt.Println(helpers.WarnStyle.Render("Skipping due to runif check"))
-				//if len(out) > 0 {
-				//	fmt.Println(out)
-				//	fmt.Print(ifCheckErr)
-				//}
+				fmt.Println(helpers.WarnStyle.MarginLeft(2).Render("Skipping due to runif check"))
 
 				continue
 			}
 		}
 
-		// FIXME: the command argument splitting in helpers.ExecuteCommand messes with the natural quoting users would
-		//        supply in `-c` argument when setting the binary to something like `sh`.
 		out, err := helpers.ExecuteCommandInShell(exec.Command, "zsh", command)
 
-		var color string
 		if err != nil {
-			color = helpers.ColorRed
+			succeeded = false
+
+			fmt.Println(helpers.ErrorStyle.MarginLeft(2).Render("Failed!"))
+			fmt.Println(helpers.ErrorStyle.MarginLeft(4).Render("- " + out))
+
+			break
+
 		} else {
-			color = helpers.ColorGreen
-		}
-
-		if len(out) > 0 {
-			for _, line := range strings.Split(string(out), "\n") {
-				fmt.Printf("    %s\n", color+line+helpers.ColorReset)
+			if len(out) > 0 {
+				fmt.Println(helpers.BasicStyle.MarginLeft(2).Render("- " + out))
 			}
 		}
-	}
 
-	installResult := e.runSteps(options)
+		syncSucceeded := syncFiles(step, e.SourcePath, options)
 
-	var syncResult bool
-	if options.SkipFiles {
-		syncResult = true
-		fmt.Println("    " + helpers.ColorCyan + "Skipping syncing files" + helpers.ColorReset)
-	} else {
-		syncResult = e.syncFiles(options)
-	}
+		if !syncSucceeded {
+			succeeded = false
 
-	if installResult && syncResult {
-		if len(e.PostInstallMessages) > 0 {
-			message := `
-    =========================
-    Post-install instructions
-    =========================
-`
-			fmt.Println(helpers.ColorYellow + message + helpers.ColorReset)
-			for _, line := range e.PostInstallMessages {
-				fmt.Printf("    %s\n", helpers.ColorYellow+line+helpers.ColorReset)
-			}
+			break
 		}
-		fmt.Println(e.Name, "-", helpers.ColorGreen+"succeeded"+helpers.ColorReset)
-
-		return true
-	} else {
-		fmt.Println(e.Name, "-", helpers.ColorRed+"failed"+helpers.ColorReset)
 	}
 
-	return false
+	if len(e.InstallNotes) > 0 {
+		fmt.Println(lipgloss.NewStyle().MarginLeft(2).Foreground(helpers.COLORWARN).Render(
+			fmt.Sprintf("\n%s\n\n%s\n\n%s",
+				"=========== Install Notes ===========",
+				e.InstallNotes,
+				"=====================================",
+			)),
+		)
+	}
+
+	return succeeded
 }
 
-func (e Extension) hydrate() Extension {
+func (e *Extension) hydrate() {
 	// TODO: err when no manifest is found
 	path := filepath.Join(e.SourcePath, "manifest.yaml")
 	manifestJson, _ := os.ReadFile(path)
@@ -157,13 +147,12 @@ func (e Extension) hydrate() Extension {
 
 	switch helpers.CurrentPlatform() {
 	case "macos":
-		e.InstallSteps = manifest.Setup.Macos
+		e.InstallSteps = manifest.Setup.Macos.Steps
+		e.InstallNotes = manifest.Setup.Macos.InstallNotes
 	}
-
-	return e
 }
 
-func (e Extension) getSource() error {
+func (e *Extension) getSource() error {
 	var err error
 
 	switch {
@@ -178,7 +167,7 @@ func (e Extension) getSource() error {
 	return err
 }
 
-func (e Extension) getSourceFromGit() error {
+func (e *Extension) getSourceFromGit() error {
 	command := fmt.Sprintf("git -C %s clone %s %s", filepath.Join(helpers.BedrockDir, "bundle"), e.Git, e.Name)
 	var checkoutTarget string
 
@@ -202,140 +191,92 @@ func (e Extension) getSourceFromGit() error {
 	return err
 }
 
-func (e Extension) runSteps(options Options) bool {
-	//if len(e.InstallSteps) == 0 {
-	//	return true
-	//}
-	//
-	//fmt.Println(e.Name, "-", helpers.ColorYellow+"installing"+helpers.ColorReset)
-	//
-	//for _, step := range e.InstallSteps {
-	//	// pathExpansions := []string{"~", helpers.Home, "$HOME", helpers.Home, "$BEDROCK_DIR", options.BedrockDir}
-	//	command := helpers.ExpandPath(step.Command)
-	//	runIf := helpers.ExpandPath(step.RunIf)
-	//
-	//	fmt.Printf("  %s %s %s\n", "Executing", helpers.ColorYellow+step.Binary,
-	//		command+helpers.ColorReset)
-	//
-	//	if len(runIf) > 0 {
-	//		if out, ifCheckErr := executeRunIfCheck(runIf); ifCheckErr != nil {
-	//			fmt.Printf("    %s\n", helpers.ColorCyan+"Skipping due to runif check"+helpers.ColorReset)
-	//			if len(out) > 0 {
-	//				fmt.Println(out)
-	//				fmt.Print(ifCheckErr)
-	//			}
-	//
-	//			continue
-	//		}
-	//	}
-	//
-	//	// FIXME: the command argument splitting in helpers.ExecuteCommand messes with the natural quoting users would
-	//	//        supply in `-c` argument when setting the binary to something like `sh`.
-	//	out, err := helpers.ExecuteCommand(step.Binary, command)
-	//
-	//	var color string
-	//	if err != nil {
-	//		color = helpers.ColorRed
-	//	} else {
-	//		color = helpers.ColorGreen
-	//	}
-	//
-	//	if len(out) > 0 {
-	//		for _, line := range strings.Split(string(out), "\n") {
-	//			fmt.Printf("    %s\n", color+line+helpers.ColorReset)
-	//		}
-	//	}
-	//}
-
-	return true
-}
-
 func executeRunIfCheck(command string) (string, error) {
-	out, err := exec.Command("sh", "-c", command).CombinedOutput()
+	out, err := exec.Command("zsh", "-c", command).CombinedOutput()
 
 	return string(out), err
 }
 
-func (e Extension) syncFiles(options Options) bool {
-	//if len(e.Files) > 0 {
-	//	fmt.Println("  Syncing files")
-	//}
-	//
-	//pathExpansions := []string{"~", helpers.Home, "$HOME", helpers.Home, "$BEDROCK_DIR", options.BedrockDir}
-	//
-	//// TODO: Support overwriting all for the current extension.
-	//skipAll := false
-	//overwriteAll := false
-	//
-	//for _, f := range e.Files {
-	//	if skipAll {
-	//		continue
-	//	}
-	//
-	//	var source string
-	//
-	//	if f.Operation == "remote" {
-	//		source = f.Source
-	//	} else {
-	//		source = filepath.Join(e.BasePath, helpers.ExpandPath(f.Source, pathExpansions...))
-	//		if !helpers.Exists(source) {
-	//			fmt.Println("    " + helpers.ColorRed + source + " does not exist, skipping." + helpers.ColorReset)
-	//			return false
-	//		}
-	//	}
-	//
-	//	destination := helpers.ExpandPath(f.Target, pathExpansions...)
-	//	destinationExists := helpers.Exists(destination)
-	//
-	//	if !options.OverwriteFiles && !overwriteAll && destinationExists {
-	//		fmt.Printf("    %s already exists. Attempt to overwrite? y/n/(s)kip remaining/(O)verwrite remaining)%s ", helpers.ColorYellow+destination,
-	//			helpers.ColorReset)
-	//		reader := bufio.NewReader(os.Stdin)
-	//		response, _ := reader.ReadString('\n')
-	//		response = strings.TrimSpace(response)
-	//		fmt.Println("")
-	//		if response == "s" {
-	//			skipAll = true
-	//			fmt.Println("    " + helpers.ColorCyan + "Skipping remaining files for extension\n" + helpers.ColorReset)
-	//			continue
-	//		} else if response != "y" {
-	//			fmt.Println("    " + helpers.ColorCyan + "Skipping" + " " + destination + "\n" + helpers.ColorReset)
-	//			continue
-	//		} else if response != "O" {
-	//			overwriteAll = true
-	//			fmt.Println("    " + helpers.ColorYellow + "Overwriting all files for extension\n" + helpers.ColorReset)
-	//			continue
-	//		}
-	//	}
-	//
-	//	destinationBasePath := filepath.Dir(destination)
-	//	if !helpers.Exists(destinationBasePath) {
-	//		os.MkdirAll(destinationBasePath, os.FileMode(0744))
-	//	}
-	//
-	//	os.Remove(destination)
-	//
-	//	// FIXME: there's no guard against no operation being specified in the manifest
-	//	switch f.Operation {
-	//	case "copy":
-	//		helpers.Copy(source, destination)
-	//	case "symlink":
-	//		os.Symlink(source, destination)
-	//	case "remote":
-	//		if err := helpers.Download(source, destination); err != nil {
-	//			fmt.Printf("    %s%s %s - %v%s\n",
-	//				helpers.ColorRed,
-	//				"Unable to download",
-	//				source,
-	//				err,
-	//				helpers.ColorReset)
-	//			return false
-	//		}
-	//	}
-	//
-	//	fmt.Printf("    %s %s\n", helpers.ColorYellow+f.Operation,
-	//		f.Source+" -> "+f.Target+helpers.ColorReset)
-	//}
+func syncFiles(step InstallStep, sourcePath string, options Options) bool {
+	if len(step.Files) == 0 {
+		return true
+	}
+
+	pathExpansions := []string{"~", helpers.Home, "$HOME", helpers.Home, "$BEDROCK_DIR", options.BedrockDir}
+
+	// TODO: Support overwriting all for the current extension.
+	skipAll := false
+	overwriteAll := false
+
+	for _, f := range step.Files {
+		if skipAll {
+			continue
+		}
+
+		var source string
+
+		if f.Operation == "remote" {
+			source = f.Source
+		} else {
+			source = filepath.Join(sourcePath, helpers.ExpandPath(f.Source, pathExpansions...))
+			if !helpers.Exists(source) {
+				fmt.Println("    " + helpers.ColorRed + source + " does not exist, skipping." + helpers.ColorReset)
+				return false
+			}
+		}
+
+		destination := helpers.ExpandPath(f.Target, pathExpansions...)
+		destinationExists := helpers.Exists(destination)
+
+		if !options.OverwriteFiles && !overwriteAll && destinationExists {
+			fmt.Printf(
+				"%s%s",
+				lipgloss.NewStyle().MarginLeft(2).Render(fmt.Sprintf("%s exists.", destination)),
+				lipgloss.NewStyle().Foreground(helpers.COLORWARN).Bold(true).Render(fmt.Sprintf(" Attempt to overwrite? y/n/(S)kip all/(O)verwrite all) ")))
+
+			reader := bufio.NewReader(os.Stdin)
+			response, _ := reader.ReadString('\n')
+			response = strings.TrimSpace(response)
+
+			if response == "n" {
+				fmt.Println(lipgloss.NewStyle().Bold(true).MarginLeft(2).Foreground(helpers.COLORWARN).Render("Skipping " + f.Source))
+				continue
+			} else if response == "S" {
+				skipAll = true
+				fmt.Println(lipgloss.NewStyle().Bold(true).MarginLeft(2).Foreground(helpers.COLORWARN).Render("Skipping remaining files"))
+				continue
+			} else if response == "O" {
+				overwriteAll = true
+				fmt.Println(lipgloss.NewStyle().Bold(true).MarginLeft(2).Foreground(helpers.COLORWARN).Render("Overwriting all files"))
+			}
+		}
+
+		destinationBasePath := filepath.Dir(destination)
+		if !helpers.Exists(destinationBasePath) {
+			os.MkdirAll(destinationBasePath, os.FileMode(0744))
+		}
+
+		os.Remove(destination)
+
+		// FIXME: there's no guard against no operation being specified in the manifest
+		switch f.Operation {
+		case "copy":
+			helpers.Copy(source, destination)
+		case "symlink":
+			os.Symlink(source, destination)
+		case "remote":
+			if err := helpers.Download(source, destination); err != nil {
+				fmt.Println(lipgloss.NewStyle().Foreground(helpers.COLORSUCCESS).MarginLeft(2).Render(fmt.Sprintf("%s %s - %v\n",
+					"Unable to download",
+					source,
+					err,
+				)))
+				return false
+			}
+		}
+
+		fmt.Println(lipgloss.NewStyle().Foreground(helpers.COLORSUCCESS).MarginLeft(2).Render(fmt.Sprintf("%s %s -> %s", f.Operation, f.Source, f.Target)))
+	}
 
 	return true
 }
