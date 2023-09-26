@@ -15,19 +15,13 @@ var installCmd = &cobra.Command{
 	Short: "Install the Bedrock extension bundle",
 	Long:  "Install the Bedrock extensions defined in the bundle file",
 	Run: func(cmd *cobra.Command, args []string) {
-		//packageManager := viper.GetString("settings.package_manager")
-		//if len(packageManager) == 0 {
-		//	packageManager = helpers.DefaultPkgManager()
-		//}
-
 		if OverwriteFiles && SkipFiles {
 			fmt.Println("WARN: overwrite-files and skip-files were set. Falling back to skip-files.")
 			OverwriteFiles = false
 		}
 
 		bundlerOptions := bundler.Options{
-			BedrockDir: helpers.BedrockDir,
-			//PackageManager: packageManager,
+			BedrockDir:     helpers.BedrockDir,
 			OverwriteFiles: OverwriteFiles,
 			SkipFiles:      SkipFiles,
 		}

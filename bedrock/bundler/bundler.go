@@ -13,7 +13,6 @@ type Options struct {
 	OverwriteFiles bool
 	SkipFiles      bool
 	BedrockDir     string
-	PackageManager string
 	BundlePath     string
 }
 
@@ -43,7 +42,14 @@ func Bundle(options Options) bool {
 			break
 		}
 
-		extension.Prepare(options)
+		prepareErr := extension.Prepare(options)
+
+		if prepareErr != nil {
+			fmt.Println(helpers.ErrorStyle.MarginLeft(2).Render("Failed with:"))
+			fmt.Println(helpers.ErrorStyle.MarginLeft(4).Render(prepareErr.Error()))
+
+			break
+		}
 
 		setupSucceeded := extension.Setup(options)
 

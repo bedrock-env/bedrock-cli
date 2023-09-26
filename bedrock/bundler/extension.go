@@ -153,18 +153,14 @@ func (e *Extension) hydrate() {
 }
 
 func (e *Extension) getSource() error {
-	var err error
-
 	switch {
 	case e.Path != "":
 		return nil
 	case e.Git != "":
-		err = e.getSourceFromGit()
-		//case e.Archive != "":
-		//e.getSourceFromArchive()
+		return e.getSourceFromGit()
 	}
 
-	return err
+	return nil
 }
 
 func (e *Extension) getSourceFromGit() error {
@@ -186,7 +182,11 @@ func (e *Extension) getSourceFromGit() error {
 	}
 
 	// TODO: maybe pass in the output pipe and live write the command output
-	_, err := helpers.ExecuteCommandInShell(exec.Command, "zsh", command)
+	output, err := helpers.ExecuteCommandInShell(exec.Command, "zsh", command)
+
+	if err != nil {
+		return errors.New(output)
+	}
 
 	return err
 }
@@ -232,22 +232,24 @@ func syncFiles(step InstallStep, sourcePath string, options Options) bool {
 			fmt.Printf(
 				"%s%s",
 				lipgloss.NewStyle().MarginLeft(2).Render(fmt.Sprintf("%s exists.", destination)),
-				lipgloss.NewStyle().Foreground(helpers.COLORWARN).Bold(true).Render(fmt.Sprintf(" Attempt to overwrite? y/n/(S)kip all/(O)verwrite all) ")))
+				lipgloss.NewStyle().Foreground(helpers.COLORWARN).Bold(true).Render(
+					fmt.Sprintf(" Overwrite? y, n (default), (s)kip all, (O)verwrite all ")),
+			)
 
 			reader := bufio.NewReader(os.Stdin)
 			response, _ := reader.ReadString('\n')
 			response = strings.TrimSpace(response)
 
-			if response == "n" {
+			if response == "n" || response == "" {
 				fmt.Println(lipgloss.NewStyle().Bold(true).MarginLeft(2).Foreground(helpers.COLORWARN).Render("Skipping " + f.Source))
 				continue
-			} else if response == "S" {
+			} else if response == "s" {
 				skipAll = true
 				fmt.Println(lipgloss.NewStyle().Bold(true).MarginLeft(2).Foreground(helpers.COLORWARN).Render("Skipping remaining files"))
 				continue
 			} else if response == "O" {
 				overwriteAll = true
-				fmt.Println(lipgloss.NewStyle().Bold(true).MarginLeft(2).Foreground(helpers.COLORWARN).Render("Overwriting all files"))
+				fmt.Println(lipgloss.NewStyle().Bold(true).MarginLeft(2).Foreground(helpers.COLORWARN).Render("Overwriting all extension files"))
 			}
 		}
 
